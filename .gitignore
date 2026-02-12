@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# env files
+.env
+.env.local
+.env.production
+
+# Next.js
+client/.next/
+client/out/
+
+# misc
+.DS_Store
+*.log
+npm-debug.log*
+node_modules
