@@ -64,7 +64,11 @@ const limiter = rateLimit({
 app.use('/api', limiter);
 
 // MongoDB
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI, {
+    autoIndex: false,
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 45000
+})
     .then(() => console.log('✅ MongoDB Connected'))
     .catch(err => {
         console.error('❌ MongoDB Error:', err.message);
