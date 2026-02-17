@@ -4,7 +4,7 @@ import ClientHome from '../components/ClientHome';
 import BlogCard from '../components/BlogCard';
 import Link from 'next/link';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : 'https://bgmi-tournament-production.up.railway.app');
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:5000' : 'https://bgmi-tournament-production.up.railway.app');
 
 async function getFeaturedArticles() {
     try {
@@ -12,7 +12,7 @@ async function getFeaturedArticles() {
         if (!res.ok) return [];
         return await res.json();
     } catch (err) {
-        console.error('Failed to fetch articles:', err);
+        console.error(`Error fetching articles from ${API_URL}:`, err.message);
         return [];
     }
 }
@@ -101,8 +101,8 @@ export default async function Home() {
                         </div>
                     ) : (
                         <div className="text-center py-10 flex flex-col items-center justify-center min-h-[300px]">
-                            <div className="spinner mb-4"></div>
-                            <p className="text-gray-500">Loading latest articles...</p>
+                            <div className="text-6xl mb-4">📝</div>
+                            <p className="text-gray-500">No articles available</p>
                         </div>
                     )}
                 </div>

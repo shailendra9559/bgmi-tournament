@@ -4,7 +4,7 @@ import BlogCard from '../../../components/BlogCard';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : 'https://bgmi-tournament-production.up.railway.app');
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:5000' : 'https://bgmi-tournament-production.up.railway.app');
 
 async function getArticle(slug) {
     try {
