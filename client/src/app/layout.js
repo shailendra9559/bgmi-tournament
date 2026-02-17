@@ -5,19 +5,43 @@ import Script from 'next/script'
 export const metadata = {
     metadataBase: new URL('https://bgmi.blog'),
     title: {
-        default: 'BGMI Tournament & Blog — Play, Win, Learn | bgmi.blog',
+        default: 'BGMI Tournament & Blog — Play, Win Real Money | bgmi.blog',
         template: '%s | BGMI Tournament'
     },
-    description: 'India\'s #1 BGMI Community. Read latest BGMI news, tips & guides, get redeem codes, and join daily tournaments to win real cash prizes.',
-    keywords: ['BGMI tournament', 'BGMI blog', 'BGMI esports', 'BGMI redeem codes', 'BGMI tips', 'play BGMI earn money', 'battlegrounds mobile india'],
+    description: 'India\'s #1 BGMI Tournament Platform. Join daily matches with Free Entry & Paid options to win Real Cash. Read latest BGMI news, tips, guides & get redeem codes.',
+    keywords: [
+        'BGMI tournament', 'BGMI tournament app', 'play BGMI earn money',
+        'BGMI daily matches', 'free entry bgmi tournament', 'real money gaming',
+        'BGMI blog', 'BGMI esports', 'BGMI redeem codes', 'BGMI tips and tricks',
+        'battlegrounds mobile india', 'krafton'
+    ],
     openGraph: {
         type: 'website',
         locale: 'en_IN',
         url: 'https://bgmi.blog/',
-        siteName: 'BGMI Tournament',
+        siteName: 'BGMI Tournament & Blog',
+        title: 'Play BGMI Tournaments & Win Real Cash | BGMI Blog',
+        description: 'Join the ultimate BGMI community. Daily tournaments, huge prize pools, and instant withdrawals. Plus, get the latest news and guides.',
+        images: [
+            {
+                url: '/og-image.jpg', // Ensure this image exists slightly later or use a placeholder
+                width: 1200,
+                height: 630,
+                alt: 'BGMI Tournament Platform',
+            },
+        ],
         icons: {
             icon: '/favicon.ico',
         }
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'BGMI Tournament — Play & Win Cash',
+        description: 'Daily BGMI Tournaments with Instant Payouts. Join now!',
+        // images: ['/og-image.jpg'], // Optional: Add if we have one
+    },
+    verification: {
+        google: 'E197F9NMfhh96LThYKzzBRbLt5M5-u1ChHjrKipe2V8', // Verified code for sy9559453612
     },
     alternates: {
         canonical: '/',

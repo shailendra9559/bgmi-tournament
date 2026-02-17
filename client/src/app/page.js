@@ -50,14 +50,16 @@ export default async function Home() {
                         <span className="text-blue-300 text-sm font-medium">#1 BGMI Community & Tournament Platform</span>
                     </div>
 
-                    <h1 className="text-4xl md:text-6xl lg:text-7xl font-heading font-bold text-white mb-6 animate-slide-up delay-100 leading-tight">
-                        Master the <span className="text-gradient">Unknown</span>,<br className="hidden md:block" />
-                        Win Real <span className="text-gradient-blue">Cash</span>
+                    {/* Main Heading for SEO */}
+                    <h1 className="text-4xl md:text-6xl lg:text-7xl font-heading font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 mb-6 drop-shadow-2xl animate-fade-in-up">
+                        Play BGMI Tournaments <br className="hidden md:block" />
+                        <span className="text-white">Win Real Cash Daily</span>
                     </h1>
 
-                    <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10 animate-slide-up delay-200">
-                        Get the latest BGMI tips, redeem codes, and esports news.
-                        Then put your skills to the test in our daily tournaments.
+                    <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-in-up delay-100">
+                        Join India's fastest-growing Esports community.
+                        <strong> Free Entry</strong> matches, <strong>Instant Withdrawals</strong> via UPI,
+                        and 24/7 dedicated support.
                     </p>
 
                     {/* CTA Buttons */}
