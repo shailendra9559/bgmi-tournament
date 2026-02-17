@@ -1,6 +1,7 @@
 import './globals.css'
 import Providers from '../components/Providers'
 import Script from 'next/script'
+import { SpeedInsights } from '@vercel/speed-insights/next';
 
 export const metadata = {
     metadataBase: new URL('https://bgmi.blog'),
@@ -55,10 +56,22 @@ export default function RootLayout({ children }) {
                 <link rel="preconnect" href="https://fonts.googleapis.com" />
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="true" />
                 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+
+                {/* Google Analytics 4 */}
+                <Script src="https://www.googletagmanager.com/gtag/js?id=G-2S1SJYFMCG" strategy="afterInteractive" />
+                <Script id="google-analytics" strategy="afterInteractive">
+                    {`
+                        window.dataLayer = window.dataLayer || [];
+                        function gtag(){dataLayer.push(arguments);}
+                        gtag('js', new Date());
+                        gtag('config', 'G-2S1SJYFMCG');
+                    `}
+                </Script>
             </head>
             <body className="font-body bg-gray-950 min-h-screen flex flex-col">
                 <Providers>
                     {children}
+                    <SpeedInsights />
                 </Providers>
 
                 {/* Structured Data for Organization */}
