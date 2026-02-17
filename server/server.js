@@ -23,7 +23,9 @@ const corsOptions = {
             FRONTEND_URL,
             'http://localhost:3000',
             'http://localhost:3001',
-            'https://bgmi-tournament-production.up.railway.app'
+            'https://bgmi-tournament-production.up.railway.app',
+            'https://bgmi.blog',
+            'https://www.bgmi.blog'
         ];
 
         // Allow the exact frontend URL, localhost ports, and specific production domain
