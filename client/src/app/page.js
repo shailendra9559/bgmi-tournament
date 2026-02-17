@@ -1,173 +1,117 @@
-'use client';
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import Link from 'next/link';
-import { useAuth } from '../hooks/useAuth';
 import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
+import ClientHome from '../components/ClientHome';
+import BlogCard from '../components/BlogCard';
+import Link from 'next/link';
 
-const API_URL = '';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : 'https://bgmi-tournament-production.up.railway.app');
 
-function MatchCard({ match, onJoin, isJoined, user }) {
-    const timeDiff = new Date(match.match_time) - new Date();
-    const minutesLeft = Math.floor(timeDiff / 1000 / 60);
-    const hoursLeft = Math.floor(minutesLeft / 60);
-    const isFull = match.participantCount >= (match.max_participants || 100);
-
-    return (
-        <div className="card hover:border-blue-500/60 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10">
-            <div className="flex justify-between items-center mb-3">
-                <span className="bg-yellow-500/90 text-black px-3 py-1 text-xs font-bold rounded-full">
-                    {match.map}
-                </span>
-                <span className="bg-blue-600/90 text-white px-3 py-1 text-xs font-bold rounded-full">
-                    {match.type}
-                </span>
-            </div>
-
-            <h2 className="text-xl font-bold text-white mb-2">{match.title}</h2>
-
-            <div className="text-gray-400 text-sm mb-4">
-                {hoursLeft > 0 ? `⏰ Starts in ${hoursLeft}h ${minutesLeft % 60}m` :
-                    minutesLeft > 0 ? `⏰ Starts in ${minutesLeft}m` : '🔴 Starting soon!'}
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-                <div className="bg-gray-700/50 rounded-lg p-2">
-                    <div className="text-green-400 font-bold text-lg">₹{match.prize_pool}</div>
-                    <div className="text-xs text-gray-500">Prize Pool</div>
-                </div>
-                <div className="bg-gray-700/50 rounded-lg p-2">
-                    <div className="text-yellow-400 font-bold text-lg">₹{match.entry_fee}</div>
-                    <div className="text-xs text-gray-500">Entry Fee</div>
-                </div>
-                <div className="bg-gray-700/50 rounded-lg p-2">
-                    <div className="text-blue-400 font-bold text-lg">₹{match.per_kill}</div>
-                    <div className="text-xs text-gray-500">Per Kill</div>
-                </div>
-            </div>
-
-            {/* Progress bar for participants */}
-            <div className="mb-4">
-                <div className="flex justify-between text-sm text-gray-400 mb-1">
-                    <span>👥 {match.participantCount || 0}/{match.max_participants || 100}</span>
-                    <span>{new Date(match.match_time).toLocaleString()}</span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(((match.participantCount || 0) / (match.max_participants || 100)) * 100, 100)}%` }}></div>
-                </div>
-            </div>
-
-            {match.room_id && match.room_id !== 'Hidden' && (
-                <div className="bg-green-900/30 border border-green-600/50 rounded-lg p-3 mb-4 text-center animate-pulse">
-                    <div className="text-green-400 font-bold">🔑 Room ID: {match.room_id}</div>
-                    <div className="text-green-400">🔒 Password: {match.room_password}</div>
-                </div>
-            )}
-
-            {isJoined ? (
-                <button disabled className="w-full bg-gray-600 text-gray-300 font-bold py-3 px-6 rounded-lg cursor-not-allowed">
-                    ✅ Already Joined
-                </button>
-            ) : isFull ? (
-                <button disabled className="w-full bg-red-900/50 text-red-400 font-bold py-3 px-6 rounded-lg cursor-not-allowed">
-                    Match Full
-                </button>
-            ) : (
-                <button onClick={() => onJoin(match._id, match.entry_fee)}
-                    className="w-full btn-primary hover:scale-[1.02] active:scale-95 transition-transform">
-                    Join Match — ₹{match.entry_fee}
-                </button>
-            )}
-        </div>
-    );
+async function getFeaturedArticles() {
+    try {
+        const res = await fetch(`${API_URL}/api/articles/featured?limit=6`, { next: { revalidate: 60 } });
+        if (!res.ok) return [];
+        return await res.json();
+    } catch (err) {
+        console.error('Failed to fetch articles:', err);
+        return [];
+    }
 }
 
-export default function Home() {
-    const [matches, setMatches] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const { user, refreshUser } = useAuth();
+export default async function Home() {
+    const articles = await getFeaturedArticles();
 
-    useEffect(() => {
-        fetchMatches();
-        const interval = setInterval(fetchMatches, 30000); // auto-refresh every 30s
-        return () => clearInterval(interval);
-    }, []);
-
-    const fetchMatches = async () => {
-        try {
-            const res = await axios.get(`${API_URL}/api/matches`);
-            setMatches(res.data);
-        } catch (err) { console.error(err); }
-        setLoading(false);
-    };
-
-    const joinMatch = async (matchId, fee) => {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert('Please login first!');
-            return;
-        }
-        if (!user || user.wallet_balance < fee) {
-            alert('Insufficient balance! Please add money to wallet.');
-            return;
-        }
-        try {
-            const res = await axios.post(`${API_URL}/api/matches/join`,
-                { matchId, bgmi_name: user.bgmi_name || user.username },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            alert(res.data.message);
-            fetchMatches();
-            refreshUser();
-        } catch (err) {
-            alert(err.response?.data?.message || 'Failed to join');
-        }
-    };
-
-    const isJoinedMatch = (match) => {
-        if (!user) return false;
-        return match.participants?.some(p => p.user === user.id || p.user?._id === user.id);
-    };
+    const categories = [
+        { label: 'Guides', slug: 'guides', icon: '📖', color: 'bg-green-500/10 border-green-500/20 text-green-400' },
+        { label: 'News', slug: 'news', icon: '📰', color: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
+        { label: 'Redeem Codes', slug: 'redeem-codes', icon: '🎁', color: 'bg-pink-500/10 border-pink-500/20 text-pink-400' },
+        { label: 'Tips & Tricks', slug: 'tips', icon: '💡', color: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400' },
+        { label: 'Weapons', slug: 'weapons', icon: '🔫', color: 'bg-red-500/10 border-red-500/20 text-red-400' },
+        { label: 'Esports', slug: 'esports', icon: '🏆', color: 'bg-purple-500/10 border-purple-500/20 text-purple-400' },
+    ];
 
     return (
         <>
             <Navbar />
-            <div className="container mx-auto px-4 py-8">
-                {/* Hero section */}
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3">
-                        🏆 Live <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">Tournaments</span>
+
+            {/* ═══════════ NEW HERO SECTION ═══════════ */}
+            <section className="hero-pattern relative overflow-hidden">
+                <div className="container mx-auto px-4 py-20 md:py-28 text-center relative z-10">
+                    {/* Badge */}
+                    <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-full px-4 py-1.5 mb-6 animate-slide-up">
+                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                        <span className="text-blue-300 text-sm font-medium">#1 BGMI Community & Tournament Platform</span>
+                    </div>
+
+                    <h1 className="text-4xl md:text-6xl lg:text-7xl font-heading font-bold text-white mb-6 animate-slide-up delay-100 leading-tight">
+                        Master the <span className="text-gradient">Unknown</span>,<br className="hidden md:block" />
+                        Win Real <span className="text-gradient-blue">Cash</span>
                     </h1>
-                    <p className="text-gray-400 text-lg">Join BGMI matches, compete and win real money!</p>
-                    {user && (
-                        <div className="mt-4 inline-block bg-gray-800/60 border border-gray-700 rounded-full px-6 py-2 text-sm">
-                            💰 Balance: <span className="text-green-400 font-bold">₹{user.wallet_balance || 0}</span>
-                            <span className="mx-3 text-gray-600">|</span>
-                            <Link href="/wallet" className="text-blue-400 hover:text-blue-300">Add Money →</Link>
+
+                    <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10 animate-slide-up delay-200">
+                        Get the latest BGMI tips, redeem codes, and esports news.
+                        Then put your skills to the test in our daily tournaments.
+                    </p>
+
+                    {/* CTA Buttons */}
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center animate-slide-up delay-300">
+                        <Link href="/blog" className="btn-primary text-lg px-8 py-4 rounded-xl shadow-lg shadow-blue-500/25">
+                            📖 Read Guides
+                        </Link>
+                        <Link href="#tournaments" className="btn-outline text-lg px-8 py-4 rounded-xl">
+                            🏆 Join Tournaments
+                        </Link>
+                    </div>
+
+                    {/* Quick Category Links */}
+                    <div className="mt-16 flex flex-wrap justify-center gap-3 animate-slide-up delay-400 max-w-4xl mx-auto">
+                        {categories.map((cat) => (
+                            <Link key={cat.slug} href={`/blog?category=${cat.slug}`}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium hover:scale-105 transition-transform ${cat.color}`}>
+                                <span>{cat.icon}</span> {cat.label}
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Background decorative elements */}
+                <div className="absolute top-20 left-10 w-72 h-72 bg-blue-600/5 rounded-full blur-3xl pointer-events-none"></div>
+                <div className="absolute bottom-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-3xl pointer-events-none"></div>
+            </section>
+
+            {/* ═══════════ LATEST ARTICLES ═══════════ */}
+            <section className="py-12 bg-gray-900/20 border-b border-gray-800/50">
+                <div className="container mx-auto px-4">
+                    <div className="flex justify-between items-end mb-8">
+                        <div>
+                            <h2 className="text-2xl md:text-3xl font-heading font-bold text-white mb-2">
+                                Latest <span className="text-gradient">Insights</span>
+                            </h2>
+                            <p className="text-gray-400 text-sm md:text-base">Stay updated with the meta</p>
+                        </div>
+                        <Link href="/blog" className="text-blue-400 hover:text-blue-300 text-sm font-medium flex items-center gap-1">
+                            View All <span className="text-xl">→</span>
+                        </Link>
+                    </div>
+
+                    {articles.length > 0 ? (
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                            {articles.map(article => (
+                                <BlogCard key={article._id} article={article} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 flex flex-col items-center justify-center min-h-[300px]">
+                            <div className="spinner mb-4"></div>
+                            <p className="text-gray-500">Loading latest articles...</p>
                         </div>
                     )}
                 </div>
+            </section>
 
-                {loading ? (
-                    <div className="flex justify-center pt-20">
-                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                    </div>
-                ) : matches.length === 0 ? (
-                    <div className="text-center py-20">
-                        <div className="text-6xl mb-4">🎮</div>
-                        <p className="text-gray-400 text-xl">No matches available right now</p>
-                        <p className="text-gray-500 mt-2">Check back soon — new tournaments are added daily!</p>
-                    </div>
-                ) : (
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {matches.map(match => (
-                            <MatchCard key={match._id} match={match} onJoin={joinMatch}
-                                isJoined={isJoinedMatch(match)} user={user} />
-                        ))}
-                    </div>
-                )}
-            </div>
+            {/* ═══════════ CLIENT INTERACTIVE SECTIONS ═══════════ */}
+            <ClientHome />
+
+            <Footer />
         </>
     );
 }

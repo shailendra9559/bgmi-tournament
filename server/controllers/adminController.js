@@ -54,31 +54,48 @@ exports.verifyDeposit = async (req, res) => {
     try {
         const { transactionId, action, notes } = req.body;
 
-        const transaction = await Transaction.findById(transactionId);
-        if (!transaction) {
-            return res.status(404).json({ message: 'Transaction not found' });
-        }
-
-        if (transaction.status !== 'pending') {
-            return res.status(400).json({ message: 'Transaction already processed' });
-        }
-
-        transaction.admin_notes = notes || '';
-
         if (action === 'approve') {
-            transaction.status = 'completed';
+            // Atomic update to ensure we only process PENDING transactions once
+            const transaction = await Transaction.findOneAndUpdate(
+                { _id: transactionId, status: 'pending' },
+                {
+                    status: 'completed',
+                    admin_notes: notes || ''
+                },
+                { new: true }
+            );
+
+            if (!transaction) {
+                return res.status(400).json({ message: 'Transaction not found or already processed' });
+            }
 
             // Add money to user wallet
-            const user = await User.findById(transaction.user);
-            user.wallet_balance += transaction.amount;
-            user.total_deposited += transaction.amount;
-            await user.save();
+            await User.findByIdAndUpdate(
+                transaction.user,
+                {
+                    $inc: {
+                        wallet_balance: transaction.amount,
+                        total_deposited: transaction.amount
+                    }
+                }
+            );
 
-            await transaction.save();
             res.json({ message: `₹${transaction.amount} added to user wallet` });
         } else {
-            transaction.status = 'rejected';
-            await transaction.save();
+            // Reject
+            const transaction = await Transaction.findOneAndUpdate(
+                { _id: transactionId, status: 'pending' },
+                {
+                    status: 'rejected',
+                    admin_notes: notes || ''
+                },
+                { new: true }
+            );
+
+            if (!transaction) {
+                return res.status(400).json({ message: 'Transaction not found or already processed' });
+            }
+
             res.json({ message: 'Deposit rejected' });
         }
     } catch (error) {

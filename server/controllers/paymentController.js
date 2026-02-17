@@ -56,22 +56,44 @@ exports.verifyPayment = async (req, res) => {
             return res.status(400).json({ message: 'Invalid signature' });
         }
 
-        const transaction = await Transaction.findOne({ razorpay_order_id });
-        if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
+        // Atomic update to ensure idempotency
+        // We find the transaction that matches the order_id AND is still 'pending'
+        // If it's already completed, this will return null, preventing double-credit.
+        const transaction = await Transaction.findOneAndUpdate(
+            { razorpay_order_id, status: 'pending' },
+            {
+                razorpay_payment_id,
+                razorpay_signature,
+                status: 'completed'
+            },
+            { new: true }
+        );
 
-        transaction.razorpay_payment_id = razorpay_payment_id;
-        transaction.razorpay_signature = razorpay_signature;
-        transaction.status = 'completed';
-        await transaction.save();
+        if (!transaction) {
+            // Check if it was already completed to give a better error message
+            const existing = await Transaction.findOne({ razorpay_order_id });
+            if (existing && existing.status === 'completed') {
+                return res.status(200).json({ message: 'Payment already verified', balance: existing.amount }); // Return success for retry
+            }
+            return res.status(404).json({ message: 'Transaction not found or already processed' });
+        }
 
-        const user = await User.findById(transaction.user);
-        user.wallet_balance += transaction.amount;
-        user.total_deposited += transaction.amount;
-        await user.save();
+        // Add to user balance atomically
+        const user = await User.findByIdAndUpdate(
+            transaction.user,
+            {
+                $inc: {
+                    wallet_balance: transaction.amount,
+                    total_deposited: transaction.amount
+                }
+            },
+            { new: true }
+        );
 
         res.json({ message: 'Payment successful', balance: user.wallet_balance });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Payment Verification Error:', error);
+        res.status(500).json({ message: 'Internal server error during payment verification' });
     }
 };
 
@@ -79,21 +101,28 @@ exports.verifyPayment = async (req, res) => {
 exports.requestWithdrawal = async (req, res) => {
     try {
         const { amount, upi_id } = req.body;
-        const user = await User.findById(req.user.id);
+        const userId = req.user.id;
+
+        const user = await User.findById(userId);
 
         if (user.kycStatus !== 'verified') {
             return res.status(400).json({ message: 'KYC verification required for withdrawal' });
         }
         if (amount < 100) return res.status(400).json({ message: 'Minimum withdrawal is ₹100' });
-        if (user.wallet_balance < amount) {
+
+        // Atomic check and update to prevent race limit
+        const updatedUser = await User.findOneAndUpdate(
+            { _id: userId, wallet_balance: { $gte: amount } },
+            { $inc: { wallet_balance: -amount } },
+            { new: true }
+        );
+
+        if (!updatedUser) {
             return res.status(400).json({ message: 'Insufficient balance' });
         }
 
-        user.wallet_balance -= amount;
-        await user.save();
-
         await Transaction.create({
-            user: user._id,
+            user: userId,
             type: 'withdrawal',
             amount,
             withdrawal_upi_id: upi_id || user.kycDocuments?.upiId,
@@ -101,34 +130,15 @@ exports.requestWithdrawal = async (req, res) => {
             description: 'Withdrawal request'
         });
 
-        res.json({ message: 'Withdrawal request submitted', balance: user.wallet_balance });
+        res.json({ message: 'Withdrawal request submitted', balance: updatedUser.wallet_balance });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-// Add Money (Demo - for testing without Razorpay)
+// Add Money Demo - REMOVED FOR SECURITY
 exports.addMoneyDemo = async (req, res) => {
-    try {
-        const { amount } = req.body;
-        const user = await User.findById(req.user.id);
-
-        user.wallet_balance += amount;
-        user.total_deposited += amount;
-        await user.save();
-
-        await Transaction.create({
-            user: user._id,
-            type: 'deposit',
-            amount,
-            status: 'completed',
-            description: 'Demo deposit'
-        });
-
-        res.json({ message: 'Money added', balance: user.wallet_balance });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+    return res.status(410).json({ message: 'This endpoint is no longer available.' });
 };
 
 // Get Transactions

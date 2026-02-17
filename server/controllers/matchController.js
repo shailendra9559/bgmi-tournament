@@ -54,43 +54,84 @@ exports.joinMatch = async (req, res) => {
         const { matchId, bgmi_name } = req.body;
         const userId = req.user.id;
 
-        const user = await User.findById(userId);
+        // 1. Atomic check and deduct balance
+        // We do this FIRST to ensure user has potential to join
         const match = await Match.findById(matchId);
-
         if (!match) return res.status(404).json({ message: 'Match not found' });
         if (match.status !== 'upcoming') return res.status(400).json({ message: 'Match is not open for joining' });
-        if (match.participants.length >= match.max_participants) return res.status(400).json({ message: 'Match is full' });
 
+        // Check if already joined (in memory check is okay here as we double check with atomic push later)
         const alreadyJoined = match.participants.some(p => p.user.toString() === userId);
         if (alreadyJoined) return res.status(400).json({ message: 'Already joined this match' });
-        if (user.wallet_balance < match.entry_fee) return res.status(400).json({ message: 'Insufficient balance' });
 
-        // Deduct balance
-        user.wallet_balance -= match.entry_fee;
-        user.matches_played.push(matchId);
-        await user.save();
+        // Atomic balance deduction
+        const user = await User.findOneAndUpdate(
+            { _id: userId, wallet_balance: { $gte: match.entry_fee } },
+            {
+                $inc: { wallet_balance: -match.entry_fee },
+                $push: { matches_played: matchId }
+            },
+            { new: true }
+        );
 
-        // Add to match
-        match.participants.push({ user: userId, bgmi_name: bgmi_name || user.bgmi_name });
-        await match.save();
+        if (!user) return res.status(400).json({ message: 'Insufficient balance' });
 
-        // Create transaction
-        await Transaction.create({
-            user: userId, type: 'entry_fee', amount: match.entry_fee,
-            status: 'completed', match: matchId,
-            description: `Entry fee for ${match.title}`
-        });
+        try {
+            // 2. Atomic push to match participants
+            // This prevents race condition where multiple users join at once exceeding max_participants
+            const updatedMatch = await Match.findOneAndUpdate(
+                {
+                    _id: matchId,
+                    status: 'upcoming',
+                    $expr: { $lt: [{ $size: "$participants" }, "$max_participants"] } // Ensure size < max
+                },
+                {
+                    $push: {
+                        participants: {
+                            user: userId,
+                            bgmi_name: bgmi_name || user.bgmi_name
+                        }
+                    }
+                },
+                { new: true }
+            );
 
-        // Emit socket event
-        const socketHandler = req.app.get('socketHandler');
-        if (socketHandler) {
-            socketHandler.emitParticipantJoined(matchId, {
-                userId, bgmi_name: bgmi_name || user.bgmi_name,
-                count: match.participants.length
+            if (!updatedMatch) {
+                // If match update failed (full or changed status), REFUND USER
+                await User.findByIdAndUpdate(userId, {
+                    $inc: { wallet_balance: match.entry_fee },
+                    $pull: { matches_played: matchId }
+                });
+                return res.status(400).json({ message: 'Match is full or no longer available' });
+            }
+
+            // 3. Create Transaction Record
+            await Transaction.create({
+                user: userId, type: 'entry_fee', amount: match.entry_fee,
+                status: 'completed', match: matchId,
+                description: `Entry fee for ${match.title}`
             });
-        }
 
-        res.json({ message: 'Joined successfully!', balance: user.wallet_balance, participantCount: match.participants.length });
+            // Emit socket event
+            const socketHandler = req.app.get('socketHandler');
+            if (socketHandler) {
+                socketHandler.emitParticipantJoined(matchId, {
+                    userId, bgmi_name: bgmi_name || user.bgmi_name,
+                    count: updatedMatch.participants.length
+                });
+            }
+
+            res.json({ message: 'Joined successfully!', balance: user.wallet_balance, participantCount: updatedMatch.participants.length });
+
+        } catch (innerError) {
+            // Catch any database errors during match update and refund
+            console.error("Match join error, refunding:", innerError);
+            await User.findByIdAndUpdate(userId, {
+                $inc: { wallet_balance: match.entry_fee },
+                $pull: { matches_played: matchId }
+            });
+            res.status(500).json({ message: 'Error joining match, entry fee refunded.' });
+        }
     } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
@@ -136,34 +177,49 @@ exports.deleteMatch = async (req, res) => {
         const match = await Match.findById(req.params.id);
         if (!match) return res.status(404).json({ message: 'Match not found' });
 
+        let refundCount = 0;
+        let refundedAmount = 0;
+
         // If match has participants who paid, refund them
         if (match.participants.length > 0 && match.entry_fee > 0 && match.status !== 'completed') {
-            for (const participant of match.participants) {
-                const user = await User.findById(participant.user);
-                if (user) {
-                    user.wallet_balance += match.entry_fee;
-                    await user.save();
-                    await Transaction.create({
-                        user: participant.user, type: 'refund', amount: match.entry_fee,
-                        status: 'completed', match: match._id,
-                        description: `Refund: "${match.title}" was deleted by admin`
-                    });
-                }
+            const userIds = match.participants.map(p => p.user);
+
+            // Bulk update wallets
+            await User.updateMany(
+                { _id: { $in: userIds } },
+                { $inc: { wallet_balance: match.entry_fee } }
+            );
+
+            // Create refund transactions
+            const transactions = userIds.map(uid => ({
+                user: uid,
+                type: 'refund',
+                amount: match.entry_fee,
+                status: 'completed',
+                match: match._id,
+                description: `Refund: "${match.title}" was deleted by admin`
+            }));
+
+            if (transactions.length > 0) {
+                await Transaction.insertMany(transactions);
             }
+
+            refundCount = userIds.length;
+            refundedAmount = refundCount * match.entry_fee;
         }
 
         await Match.findByIdAndDelete(req.params.id);
+
         // Also clean up related transactions
         await Transaction.updateMany(
             { match: req.params.id, type: 'entry_fee', status: 'completed' },
             { $set: { description: `Entry fee for "${match.title}" (match deleted, refunded)` } }
         );
 
-        const refundCount = match.entry_fee > 0 && match.status !== 'completed' ? match.participants.length : 0;
         res.json({
-            message: `Match deleted.${refundCount > 0 ? ` ₹${match.entry_fee} refunded to ${refundCount} participant(s).` : ''}`,
+            message: `Match deleted.${refundCount > 0 ? ` ₹${refundedAmount} refunded to ${refundCount} participant(s).` : ''}`,
             refundedCount: refundCount,
-            refundedAmount: refundCount * match.entry_fee
+            refundedAmount: refundedAmount
         });
     } catch (err) { res.status(500).json({ message: err.message }); }
 };
@@ -181,22 +237,33 @@ exports.changeMatchStatus = async (req, res) => {
         if (!match) return res.status(404).json({ message: 'Match not found' });
 
         const oldStatus = match.status;
+        let refundMsg = '';
 
         // If cancelling, refund all participants
         if (status === 'cancelled' && oldStatus !== 'cancelled' && oldStatus !== 'completed') {
             if (match.participants.length > 0 && match.entry_fee > 0) {
-                for (const participant of match.participants) {
-                    const user = await User.findById(participant.user);
-                    if (user) {
-                        user.wallet_balance += match.entry_fee;
-                        await user.save();
-                        await Transaction.create({
-                            user: participant.user, type: 'refund', amount: match.entry_fee,
-                            status: 'completed', match: match._id,
-                            description: `Refund: "${match.title}" was cancelled`
-                        });
-                    }
+                const userIds = match.participants.map(p => p.user);
+
+                // Bulk refund
+                await User.updateMany(
+                    { _id: { $in: userIds } },
+                    { $inc: { wallet_balance: match.entry_fee } }
+                );
+
+                const transactions = userIds.map(uid => ({
+                    user: uid,
+                    type: 'refund',
+                    amount: match.entry_fee,
+                    status: 'completed',
+                    match: match._id,
+                    description: `Refund: "${match.title}" was cancelled`
+                }));
+
+                if (transactions.length > 0) {
+                    await Transaction.insertMany(transactions);
                 }
+
+                refundMsg = ` ₹${match.entry_fee} refunded to ${userIds.length} participant(s).`;
             }
         }
 
@@ -208,10 +275,6 @@ exports.changeMatchStatus = async (req, res) => {
         if (socketHandler) {
             socketHandler.emitMatchUpdate(req.params.id, { status, title: match.title });
         }
-
-        const refundMsg = status === 'cancelled' && match.participants.length > 0 && match.entry_fee > 0
-            ? ` ₹${match.entry_fee} refunded to ${match.participants.length} participant(s).`
-            : '';
 
         res.json({ message: `Status changed: ${oldStatus} → ${status}.${refundMsg}`, match });
     } catch (err) { res.status(500).json({ message: err.message }); }

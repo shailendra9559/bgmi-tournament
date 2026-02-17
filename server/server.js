@@ -18,14 +18,30 @@ const isProd = process.env.NODE_ENV === 'production';
 const corsOptions = {
     origin: function (origin, callback) {
         if (!origin) return callback(null, true);
-        // Always allow the configured frontend URL
-        if (origin === FRONTEND_URL) return callback(null, true);
-        // Allow ngrok in dev
-        if (!isProd && /\.ngrok-free\.app$/.test(origin)) return callback(null, true);
-        // In dev, allow all; in prod, reject unknown origins
-        callback(null, !isProd);
+
+        const allowedOrigins = [
+            FRONTEND_URL,
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'https://bgmi-tournament-production.up.railway.app'
+        ];
+
+        // Allow the exact frontend URL, localhost ports, and specific production domain
+        if (allowedOrigins.includes(origin) || (!isProd && /\.ngrok-free\.app$/.test(origin))) {
+            return callback(null, true);
+        }
+
+        // Allow Vercel preview deployments if needed (optional, safer to be strict for now)
+        // if (/\.vercel\.app$/.test(origin)) return callback(null, true);
+
+        // In dev, allow all; in prod, strict check
+        if (!isProd) return callback(null, true);
+
+        callback(new Error('Not allowed by CORS'));
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
 };
 
 const io = new Server(httpServer, { cors: corsOptions });
@@ -37,12 +53,12 @@ app.set('socketHandler', socketHandler);
 // Security
 app.use(helmet());
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '50kb' }));
 
 // Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: isProd ? 100 : 500,
+    max: 1000,
     message: { message: 'Too many requests, please try again later.' }
 });
 app.use('/api', limiter);
@@ -60,6 +76,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/matches', require('./routes/matchRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/articles', require('./routes/articleRoutes'));
 
 // Health check
 app.get('/api/health', (req, res) => {
