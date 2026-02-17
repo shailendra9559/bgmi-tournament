@@ -59,7 +59,7 @@ export default function LoginPage() {
                         <input type="text" value={username} onChange={e => setUsername(e.target.value)}
                             placeholder="Username" className="input" required minLength={3} />
                     )}
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value.trim())}
                         placeholder="Email" className="input" required />
                     <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                         placeholder="Password" className="input" required minLength={6} />

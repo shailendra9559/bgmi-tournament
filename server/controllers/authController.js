@@ -58,12 +58,14 @@ exports.login = async (req, res) => {
         const user = await User.findOne({ email }).select('+password');
 
         if (!user || !user.password) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            console.log(`Login failed for email: ${email}`);
+            return res.status(401).json({ message: `Invalid credentials for: "${email}"` });
         }
 
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            console.log(`Password mismatch for email: ${email}`);
+            return res.status(401).json({ message: `Invalid credentials for: "${email}"` });
         }
 
         if (user.isBlocked) {

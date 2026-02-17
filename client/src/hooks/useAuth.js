@@ -17,11 +17,15 @@ export function AuthProvider({ children }) {
         const token = localStorage.getItem('token');
         if (token) {
             try {
-                const res = await axios.get(`${API_URL}/api/auth/profile`, {
+                // Log for debugging production issues
+                console.log('Checking auth with token...');
+                const res = await axios.get('/api/auth/profile', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setUser(res.data);
-            } catch {
+                console.log('Auth success:', res.data.username);
+            } catch (err) {
+                console.error('Auth check failed:', err.response?.status);
                 localStorage.removeItem('token');
             }
         }
