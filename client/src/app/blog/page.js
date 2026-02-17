@@ -30,7 +30,8 @@ async function getArticles(category, page = 1) {
     try {
         const params = new URLSearchParams({ page, limit: 12 });
         if (category) params.append('category', category);
-        const res = await fetch(`${API_URL}/api/articles?${params}`, { next: { revalidate: 60 } });
+        // Disable cache for fresh content
+        const res = await fetch(`${API_URL}/api/articles?${params}`, { cache: 'no-store' });
         if (!res.ok) return { articles: [], pagination: { page: 1, pages: 0, total: 0 } };
         return await res.json();
     } catch {
@@ -40,7 +41,8 @@ async function getArticles(category, page = 1) {
 
 async function getCategories() {
     try {
-        const res = await fetch(`${API_URL}/api/articles/categories`, { next: { revalidate: 300 } });
+        // Disable cache for fresh categories
+        const res = await fetch(`${API_URL}/api/articles/categories`, { cache: 'no-store' });
         if (!res.ok) return [];
         return await res.json();
     } catch {

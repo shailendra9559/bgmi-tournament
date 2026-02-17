@@ -8,9 +8,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'de
 
 async function getFeaturedArticles() {
     try {
-        const res = await fetch(`${API_URL}/api/articles/featured?limit=6`, { next: { revalidate: 60 } });
-        if (!res.ok) return [];
-        return await res.json();
+        // Disable cache to ensure fresh content is always fetched
+        const res = await fetch(`${API_URL}/api/articles/featured?limit=6`, { cache: 'no-store' });
+
+        if (!res.ok) {
+            console.error(`Failed to fetch articles: ${res.status} ${res.statusText}`);
+            return [];
+        }
+
+        const data = await res.json();
+        // Strict validation to ensure array
+        return Array.isArray(data) ? data : [];
     } catch (err) {
         console.error(`Error fetching articles from ${API_URL}:`, err.message);
         return [];

@@ -8,7 +8,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'de
 
 async function getArticle(slug) {
     try {
-        const res = await fetch(`${API_URL}/api/articles/${slug}`, { next: { revalidate: 60 } });
+        const res = await fetch(`${API_URL}/api/articles/${slug}`, { cache: 'no-store' });
         if (!res.ok) return null;
         return await res.json();
     } catch {

@@ -27,9 +27,13 @@ export default function ClientHome() {
 
     const fetchMatches = async () => {
         try {
-            const res = await axios.get(`${API_URL}/api/matches`);
+            // Use relative path to leverage Next.js rewrites (bypasses CORS)
+            const res = await axios.get('/api/matches');
             setMatches(res.data);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error('Error fetching matches:', err);
+            // Don't alert on background fetch, just log
+        }
         setLoading(false);
     };
 
@@ -41,7 +45,7 @@ export default function ClientHome() {
             return;
         }
         try {
-            const res = await axios.post(`${API_URL}/api/matches/join`,
+            const res = await axios.post('/api/matches/join',
                 { matchId, bgmi_name: user.bgmi_name || user.username },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
