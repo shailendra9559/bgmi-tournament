@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://bgmi-tournament-production.up.railway.app';
+const API_URL = 'https://bgmi-tournament-production.up.railway.app'; // Hardcoded for reliability in sitemap generation
 
 export default async function sitemap() {
     const routes = [
