@@ -5,6 +5,10 @@ import Link from 'next/link';
 import { useAuth } from '../../hooks/useAuth';
 import Navbar from '../../components/Navbar';
 
+import dynamic from 'next/dynamic';
+const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
+import 'react-quill/dist/quill.snow.css';
+
 const API_URL = '';
 
 export default function AdminPage() {
@@ -14,11 +18,21 @@ export default function AdminPage() {
     const [pendingDeposits, setPendingDeposits] = useState([]);
     const [upiSettings, setUpiSettings] = useState({ upi_id: '', qr_code: '', min_deposit: 10 });
     const [allUsers, setAllUsers] = useState([]);
+    const [articles, setArticles] = useState([]); // Blog State
     const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'user', wallet_balance: 0 });
     const [walletEdit, setWalletEdit] = useState({});
     const [expandedMatch, setExpandedMatch] = useState(null);
     const [editingMatch, setEditingMatch] = useState(null);
     const [statusFilter, setStatusFilter] = useState('all');
+
+    // Blog Form State
+    const [articleForm, setArticleForm] = useState({
+        title: '', slug: '', category: 'news',
+        content: '', coverImage: '', tags: '',
+        excerpt: '', featured: false, status: 'published'
+    });
+    const [editingArticleId, setEditingArticleId] = useState(null);
+
     const [formData, setFormData] = useState({
         title: '', map: 'Erangel', type: 'Squad',
         entry_fee: 10, prize_pool: 100, per_kill: 5,
@@ -35,16 +49,18 @@ export default function AdminPage() {
 
     const fetchData = async () => {
         try {
-            const [matchRes, depositRes, settingsRes, usersRes] = await Promise.all([
+            const [matchRes, depositRes, settingsRes, usersRes, articlesRes] = await Promise.all([
                 axios.get(`${API_URL}/api/matches/admin/all`, headers()),
                 axios.get(`${API_URL}/api/admin/deposits/pending`, headers()),
                 axios.get(`${API_URL}/api/admin/settings`),
-                axios.get(`${API_URL}/api/admin/users`, headers())
+                axios.get(`${API_URL}/api/admin/users`, headers()),
+                axios.get(`${API_URL}/api/articles?limit=100`) // Fetch entries for list
             ]);
             setMatches(matchRes.data);
             setPendingDeposits(depositRes.data);
             setUpiSettings(settingsRes.data);
             setAllUsers(usersRes.data);
+            setArticles(articlesRes.data.articles || []);
         } catch (err) { console.error(err); }
         setLoading(false);
     };
@@ -147,6 +163,64 @@ export default function AdminPage() {
         } catch (err) { alert('Failed to save'); }
     };
 
+    // ─── Blog Actions ───
+    const saveArticle = async (e) => {
+        e.preventDefault();
+        try {
+            const payload = { ...articleForm };
+            // Ensure format
+            if (payload.tags && typeof payload.tags === 'string') {
+                payload.tags = payload.tags.split(',').map(t => t.trim());
+            }
+
+            if (editingArticleId) {
+                await axios.put(`${API_URL}/api/articles/${editingArticleId}`, payload, headers());
+                alert('✅ Article updated!');
+            } else {
+                await axios.post(`${API_URL}/api/articles`, payload, headers());
+                alert('✅ Article created!');
+            }
+
+            // Reset and refresh
+            setEditingArticleId(null);
+            setArticleForm({
+                title: '', slug: '', category: 'news',
+                content: '', coverImage: '', tags: '',
+                excerpt: '', featured: false, status: 'published'
+            });
+            fetchData();
+        } catch (err) {
+            console.error(err);
+            alert(err.response?.data?.message || 'Failed to save article');
+        }
+    };
+
+    const editArticle = (article) => {
+        setArticleForm({
+            title: article.title,
+            slug: article.slug,
+            category: article.category,
+            content: article.content || '', // Content might not be in list view, check controller
+            coverImage: article.coverImage,
+            tags: article.tags ? article.tags.join(', ') : '',
+            excerpt: article.excerpt,
+            featured: article.featured,
+            status: article.status
+        });
+        setEditingArticleId(article._id);
+        setActiveTab('blog');
+        window.scrollTo(0, 0); // Scroll to top for editor
+    };
+
+    const deleteArticle = async (id, title) => {
+        if (!confirm(`🗑️ Delete article "${title}"?`)) return;
+        try {
+            await axios.delete(`${API_URL}/api/articles/${id}`, headers());
+            alert('Article deleted');
+            fetchData();
+        } catch (err) { alert('Failed to delete'); }
+    };
+
     // ─── Auth Gate ───
     if (!user || user.role !== 'admin') {
         return (
@@ -174,6 +248,7 @@ export default function AdminPage() {
         { id: 'matches', label: '🎮 Matches', count: matches.length },
         { id: 'deposits', label: '💰 Deposits', count: pendingDeposits.length, highlight: pendingDeposits.length > 0 },
         { id: 'users', label: '👥 Users', count: allUsers.length },
+        { id: 'blog', label: '📝 Blog', count: articles.length },
         { id: 'settings', label: '⚙️ Settings' }
     ];
 
@@ -512,7 +587,7 @@ export default function AdminPage() {
                                                 <td className="py-3 px-2 text-gray-400 text-xs">{u.email}</td>
                                                 <td className="py-3 px-2">
                                                     <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === 'admin' ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' :
-                                                            'bg-gray-600/20 text-gray-300 border border-gray-500/30'
+                                                        'bg-gray-600/20 text-gray-300 border border-gray-500/30'
                                                         }`}>{u.role}</span>
                                                 </td>
                                                 <td className="py-3 px-2 text-green-400 font-bold">₹{u.wallet_balance || 0}</td>
@@ -534,6 +609,136 @@ export default function AdminPage() {
                                                     ) : (
                                                         <span className="text-gray-600 text-xs">Protected</span>
                                                     )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ═══════ BLOG TAB ═══════ */}
+                {activeTab === 'blog' && (
+                    <div className="space-y-8">
+                        {/* Editor Form */}
+                        <div className="card">
+                            <h2 className="text-xl font-bold text-white mb-4">
+                                {editingArticleId ? '✏️ Edit Article' : '📝 Write New Article'}
+                            </h2>
+                            <form onSubmit={saveArticle} className="space-y-6">
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                    <div className="space-y-4">
+                                        <input placeholder="Article Title" className="input text-lg font-bold" required
+                                            value={articleForm.title} onChange={e => setArticleForm({ ...articleForm, title: e.target.value })} />
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <select className="input" value={articleForm.category}
+                                                onChange={e => setArticleForm({ ...articleForm, category: e.target.value })}>
+                                                <option value="news">News</option>
+                                                <option value="guides">Guides</option>
+                                                <option value="tips">Tips</option>
+                                                <option value="esports">Esports</option>
+                                                <option value="redeem-codes">Redeem Codes</option>
+                                                <option value="weapons">Weapons</option>
+                                            </select>
+                                            <select className="input" value={articleForm.status}
+                                                onChange={e => setArticleForm({ ...articleForm, status: e.target.value })}>
+                                                <option value="draft">Draft</option>
+                                                <option value="published">Published</option>
+                                            </select>
+                                        </div>
+
+                                        <input placeholder="Cover Image URL" className="input"
+                                            value={articleForm.coverImage} onChange={e => setArticleForm({ ...articleForm, coverImage: e.target.value })} />
+
+                                        <input placeholder="Tags (comma separated)" className="input"
+                                            value={articleForm.tags} onChange={e => setArticleForm({ ...articleForm, tags: e.target.value })} />
+
+                                        <div className="flex items-center gap-2">
+                                            <input type="checkbox" id="featured" className="w-5 h-5 rounded"
+                                                checked={articleForm.featured} onChange={e => setArticleForm({ ...articleForm, featured: e.target.checked })} />
+                                            <label htmlFor="featured" className="text-gray-300">Feature this article</label>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-full">
+                                        <textarea placeholder="Short Excerpt (SEO Description)" className="input h-full resize-none" maxLength={300}
+                                            value={articleForm.excerpt} onChange={e => setArticleForm({ ...articleForm, excerpt: e.target.value })} />
+                                    </div>
+                                </div>
+
+                                {/* Rich Text Editor */}
+                                <div className="bg-white rounded-lg overflow-hidden text-black min-h-[400px]">
+                                    <ReactQuill theme="snow" value={articleForm.content} onChange={val => setArticleForm({ ...articleForm, content: val })}
+                                        modules={{
+                                            toolbar: [
+                                                [{ 'header': [1, 2, 3, false] }],
+                                                ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+                                                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                                                ['link', 'image', 'video'],
+                                                ['clean']
+                                            ]
+                                        }}
+                                        className="h-[350px]"
+                                    />
+                                </div>
+
+                                <div className="pt-8 flex gap-3">
+                                    <button type="submit" className="btn-success px-8 py-3 text-lg">
+                                        {editingArticleId ? '💾 Update Article' : '🚀 Publish Article'}
+                                    </button>
+                                    {editingArticleId && (
+                                        <button onClick={() => {
+                                            setEditingArticleId(null);
+                                            setArticleForm({
+                                                title: '', slug: '', category: 'news',
+                                                content: '', coverImage: '', tags: '',
+                                                excerpt: '', featured: false, status: 'published'
+                                            });
+                                        }} className="bg-gray-600 hover:bg-gray-500 text-white px-6 py-3 rounded-lg">
+                                            Cancel Edit
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Article List */}
+                        <div className="card">
+                            <h2 className="text-xl font-bold text-white mb-4">📰 All Articles ({articles.length})</h2>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="border-b border-gray-700 text-gray-400 text-xs uppercase">
+                                        <tr>
+                                            <th className="py-3 px-2">Date</th>
+                                            <th className="py-3 px-2">Title</th>
+                                            <th className="py-3 px-2">Category</th>
+                                            <th className="py-3 px-2">Status</th>
+                                            <th className="py-3 px-2">Views</th>
+                                            <th className="py-3 px-2">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {articles.map(a => (
+                                            <tr key={a._id} className="border-b border-gray-800/50 hover:bg-gray-700/20 transition-colors">
+                                                <td className="py-3 px-2 text-gray-500 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
+                                                <td className="py-3 px-2 text-white font-medium">
+                                                    {a.title}
+                                                    {a.featured && <span className="ml-2 text-xs bg-yellow-500/20 text-yellow-400 px-1 rounded">★ Featured</span>}
+                                                </td>
+                                                <td className="py-3 px-2 text-gray-400 capitalize">{a.category}</td>
+                                                <td className="py-3 px-2">
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${a.status === 'published' ? 'bg-green-600/20 text-green-400' : 'bg-gray-600/20 text-gray-400'}`}>
+                                                        {a.status}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-2 text-gray-500">{a.views}</td>
+                                                <td className="py-3 px-2 flex gap-2">
+                                                    <button onClick={() => editArticle(a)} className="text-blue-400 hover:text-blue-300">Edit</button>
+                                                    <button onClick={() => deleteArticle(a._id, a.title)} className="text-red-400 hover:text-red-300">Delete</button>
+                                                    <Link href={`/blog/${a.slug}`} target="_blank" className="text-gray-400 hover:text-white">View</Link>
                                                 </td>
                                             </tr>
                                         ))}

@@ -134,11 +134,32 @@ exports.createArticle = async (req, res) => {
         // Sanitize content
         if (articleData.content) {
             articleData.content = sanitizeHtml(articleData.content, {
-                allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h2', 'h3', 'code', 'pre', 'iframe']),
+                allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+                    'img', 'h2', 'h3', 'h4', 'code', 'pre', 'iframe',
+                    'b', 'i', 'u', 's', 'em', 'strong', 'blockquote',
+                    'ul', 'ol', 'li', 'a', 'span', 'div', 'p', 'br'
+                ]),
                 allowedAttributes: {
                     ...sanitizeHtml.defaults.allowedAttributes,
-                    'img': ['src', 'alt', 'class'],
-                    'iframe': ['src', 'width', 'height', 'frameborder', 'allowfullscreen']
+                    'img': ['src', 'alt', 'class', 'width', 'height', 'style'],
+                    'iframe': ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'style'],
+                    'a': ['href', 'name', 'target', 'rel'],
+                    'span': ['style', 'class'],
+                    'div': ['style', 'class'],
+                    'p': ['style', 'class'],
+                    'li': ['style', 'class'],
+                    '*': ['style'] // Global allow for style attribute
+                },
+                allowedStyles: {
+                    '*': {
+                        // Allow all styles for now to ensure rich text works
+                        'color': [/.*/],
+                        'text-align': [/.*/],
+                        'font-size': [/.*/],
+                        'background-color': [/.*/],
+                        'width': [/.*/],
+                        'height': [/.*/]
+                    }
                 },
                 allowedIframeHostnames: ['www.youtube.com']
             });
