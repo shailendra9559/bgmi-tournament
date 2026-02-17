@@ -42,7 +42,7 @@ export const metadata = {
         // images: ['/og-image.jpg'], // Optional: Add if we have one
     },
     verification: {
-        google: 'E197F9NMfhh96LThYKzzBRbLt5M5-u1ChHjrKipe2V8', // Verified code for sy9559453612
+        google: 'E197F9NMfhh96LThYKzzBRbLt5M5-u1ChHjrKipe2V8', // Verified code provided by user on 2026-02-18
     },
     alternates: {
         canonical: '/',
